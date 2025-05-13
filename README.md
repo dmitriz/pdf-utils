@@ -107,5 +107,3 @@ Processes a single PDF for operations like merging.
 **Returns:**
 
 - Promise resolving to an object: Result object with success status
-
-
