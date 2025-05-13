@@ -13,7 +13,7 @@ const { PDFDocument } = require('pdf-lib');
  * @returns {Promise<{success: boolean, pagesAdded: number, error?: Error}>}
  *          An object indicating success or failure, and the number of pages added.
  */
-const appendPdfPages = async (sourceBuffer, targetDoc) => {
+const appendPdfs = async (sourceBuffer, targetDoc) => {
   try {
     const sourceDoc = await PDFDocument.load(sourceBuffer);
     const pageIndices = sourceDoc.getPageIndices();
@@ -59,14 +59,14 @@ const mergePdfs = async (...args) => {
     
     // Process each PDF buffer
     for (const pdfBuffer of pdfBuffers) {
-      const result = await appendPdfPages(pdfBuffer, newPdfDoc);
+      const result = await appendPdfs(pdfBuffer, newPdfDoc);
       if (!result.success) {
-        // Propagate the error from appendPdfPages
+        // Propagate the error from appendPdfs
         throw result.error;
       }
     }
     
-    return await newPdfDoc.save();
+    return Buffer.from(await newPdfDoc.save());
   } catch (error) {
     // Ensure a more descriptive error is thrown
     const errorMessage = error.message ? error.message : 'Unknown error during PDF merge';
@@ -75,6 +75,6 @@ const mergePdfs = async (...args) => {
 };
 
 module.exports = {
-  appendPdfPages,
+  appendPdfs,
   mergePdfs,
 };
