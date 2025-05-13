@@ -1,16 +1,15 @@
 /**
- * Test suite for PDF utility functions: ensureDirectoryExists, appendPdfPages, and mergePdfs.
+ * Test suite for PDF utility functions: appendPdfPages, and mergePdfs.
  *
- * - `ensureDirectoryExists`: Validates directory creation logic.
  * - `appendPdfPages`: Verifies that pages from a source PDF buffer are correctly appended
  *   to a target PDFDocument instance provided by `pdf-lib`.
  * - `mergePdfs`: Ensures multiple PDF buffers are correctly merged into a single PDF buffer
  *   by creating a new PDFDocument and sequentially appending pages from each source buffer.
  */
 
-// Node.js 'fs' module, automatically mocked by Jest for most functions if not explicitly unmocked.
-// We will provide specific mock implementations for fs.existsSync and fs.mkdirSync.
-const fs = require('fs');
+// Node.js 'fs' module is not directly used by the functions under test here anymore,
+// but Jest's default automocking behavior might still be in play for other indirect dependencies if any.
+// const fs = require('fs'); // fs is no longer used directly by the tested utils
 const { PDFDocument } = require('pdf-lib');
 const {
   // ensureDirectoryExists, // Removed
