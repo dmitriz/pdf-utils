@@ -32,7 +32,7 @@ const ensureDirectoryExists = (dirPath) => {
  * @param {PDFDocument} targetDoc - Target PDF document to add pages to
  * @returns {Promise<Object>} Result of processing
  */
-const processSinglePdf = async (pdfBuffer, targetDoc) => {
+const appendPdfPages = async (pdfBuffer, targetDoc) => {
   try {
     const sourceDoc = await PDFDocument.load(pdfBuffer);
     const copiedPages = await targetDoc.copyPages(sourceDoc, sourceDoc.getPageIndices());
@@ -53,7 +53,7 @@ const mergePdfs = async (pdfBuffers) => {
   try {
     const targetDoc = await PDFDocument.create();
     for (const pdfBuffer of pdfBuffers) {
-      const result = await processSinglePdf(pdfBuffer, targetDoc);
+      const result = await appendPdfPages(pdfBuffer, targetDoc);
       if (!result.success) {
         throw result.error;
       }
@@ -65,7 +65,7 @@ const mergePdfs = async (pdfBuffers) => {
 };
 
 module.exports = {
-  processSinglePdf,
+  appendPdfPages,
   mergePdfs,
   ensureDirectoryExists,
 };
