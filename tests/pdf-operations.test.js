@@ -8,7 +8,7 @@
  */
 
 // Import the functions to be tested
-const { appendPdfPages, mergePdfs } = require('../src/pdf-utils');
+const { appendPdfs, mergePdfs } = require('../src/pdf-utils');
 
 // Define a predictable mock PDF result that our mock pdf-lib will return
 const MOCK_MERGED_PDF_RESULT = Buffer.from('mock-merged-pdf-content');
@@ -126,7 +126,7 @@ describe('mergePdfs (public API)', () => {
     expect(Buffer.isBuffer(mergedPdfBuffer)).toBe(true);
     
     // 2. The output should match what the pdf-lib's save method produced
-    expect(mergedPdfBuffer).toBe(MOCK_MERGED_PDF_RESULT);
+    expect(mergedPdfBuffer).toEqual(MOCK_MERGED_PDF_RESULT);
     
     // Minimal verification that the right number of PDFs were loaded
     // This verifies our code is working but isn't overly coupled to implementation
@@ -144,7 +144,7 @@ describe('mergePdfs (public API)', () => {
     
     // ASSERT: Verify the result
     expect(Buffer.isBuffer(mergedPdfBuffer)).toBe(true);
-    expect(mergedPdfBuffer).toBe(MOCK_MERGED_PDF_RESULT);
+    expect(mergedPdfBuffer).toEqual(MOCK_MERGED_PDF_RESULT);
     
     // Check that both PDFs were processed
     const { PDFDocument } = require('pdf-lib');
@@ -162,7 +162,7 @@ describe('mergePdfs (public API)', () => {
     
     // ASSERT: Verify the result
     expect(Buffer.isBuffer(resultBuffer)).toBe(true);
-    expect(resultBuffer).toBe(MOCK_MERGED_PDF_RESULT);
+    expect(resultBuffer).toEqual(MOCK_MERGED_PDF_RESULT);
     
     // Check that the PDF was processed
     const { PDFDocument } = require('pdf-lib');
@@ -179,7 +179,7 @@ describe('mergePdfs (public API)', () => {
     
     // ASSERT: Should still produce a valid buffer (an empty PDF)
     expect(Buffer.isBuffer(result)).toBe(true);
-    expect(result).toBe(MOCK_MERGED_PDF_RESULT);
+    expect(result).toEqual(MOCK_MERGED_PDF_RESULT);
     
     // Verify no PDFs were loaded
     const { PDFDocument } = require('pdf-lib');
@@ -192,7 +192,7 @@ describe('mergePdfs (public API)', () => {
     
     // ASSERT: Should still produce a valid buffer (an empty PDF)
     expect(Buffer.isBuffer(result)).toBe(true);
-    expect(result).toBe(MOCK_MERGED_PDF_RESULT);
+    expect(result).toEqual(MOCK_MERGED_PDF_RESULT);
     
     // Verify no PDFs were loaded
     const { PDFDocument } = require('pdf-lib');
@@ -233,7 +233,7 @@ describe('mergePdfs (public API)', () => {
   });
 });
 
-describe('appendPdfPages (utility function)', () => {
+describe('appendPdfs (utility function)', () => {
   let mockTargetDoc;
   
   beforeEach(async () => {
@@ -250,7 +250,7 @@ describe('appendPdfPages (utility function)', () => {
     const sourceBuffer = Buffer.from('multi-page-pdf');
     
     // ACT: Call the function
-    const result = await appendPdfPages(sourceBuffer, mockTargetDoc);
+    const result = await appendPdfs(sourceBuffer, mockTargetDoc);
     
     // ASSERT: Check the function's return value
     expect(result).toEqual({
@@ -268,7 +268,7 @@ describe('appendPdfPages (utility function)', () => {
     const emptySourceBuffer = Buffer.from('empty-pdf');
     
     // ACT: Call the function
-    const result = await appendPdfPages(emptySourceBuffer, mockTargetDoc);
+    const result = await appendPdfs(emptySourceBuffer, mockTargetDoc);
     
     // ASSERT: Should report success with zero pages added
     expect(result).toEqual({
@@ -285,7 +285,7 @@ describe('appendPdfPages (utility function)', () => {
     const badSourceBuffer = Buffer.from('error-pdf');
     
     // ACT: Call the function
-    const result = await appendPdfPages(badSourceBuffer, mockTargetDoc);
+    const result = await appendPdfs(badSourceBuffer, mockTargetDoc);
     
     // ASSERT: Check error handling
     expect(result).toMatchObject({
