@@ -41,96 +41,94 @@ const extractTextContent = async (pdfBuffer) => {
   return content;
 };
 
-describe('PDF Utility Integration Tests', () => {
-  describe('mergePdfs', () => {
-    it('should merge multiple PDF buffers and preserve their content', async () => {
-      // ARRANGE: Create test PDF buffers with unique identifiers
-      const pdf1 = await createTestPdfBuffer('TEST1');
-      const pdf2 = await createTestPdfBuffer('TEST2');
-      const pdf3 = await createTestPdfBuffer('TEST3');
-      
-      // ACT: Merge the PDFs using the public API
-      const mergedPdfBuffer = await mergePdfs([pdf1, pdf2, pdf3]);
-      
-      // ASSERT:
-      // 1. Result is a Buffer
-      expect(Buffer.isBuffer(mergedPdfBuffer)).toBe(true);
-      
-      // 2. Result contains content from all source PDFs
-      const extractedContent = await extractTextContent(mergedPdfBuffer);
-      expect(extractedContent.includes('TEST1')).toBe(true);
-      expect(extractedContent.includes('TEST2')).toBe(true);
-      expect(extractedContent.includes('TEST3')).toBe(true);
-    });
-
-    it('should merge PDFs when provided as individual arguments', async () => {
-      // ARRANGE: Create test PDF buffers
-      const pdf1 = await createTestPdfBuffer('ARG1');
-      const pdf2 = await createTestPdfBuffer('ARG2');
-      
-      // ACT: Merge using individual arguments syntax
-      const mergedPdfBuffer = await mergePdfs(pdf1, pdf2);
-      
-      // ASSERT:
-      expect(Buffer.isBuffer(mergedPdfBuffer)).toBe(true);
-      
-      const extractedContent = await extractTextContent(mergedPdfBuffer);
-      expect(extractedContent.includes('ARG1')).toBe(true);
-      expect(extractedContent.includes('ARG2')).toBe(true);
-    });
-
-    it('should create a valid PDF when no inputs are provided', async () => {
-      // ACT: Call with no arguments
-      const resultBuffer = await mergePdfs();
-      
-      // ASSERT:
-      expect(Buffer.isBuffer(resultBuffer)).toBe(true);
-      // The result should be a valid PDF starting with the PDF header
-      expect(resultBuffer.toString().startsWith('%PDF-')).toBe(true);
-    });
+describe('mergePdfs', () => {
+  it('should merge multiple PDF buffers and preserve their content', async () => {
+    // ARRANGE: Create test PDF buffers with unique identifiers
+    const pdf1 = await createTestPdfBuffer('TEST1');
+    const pdf2 = await createTestPdfBuffer('TEST2');
+    const pdf3 = await createTestPdfBuffer('TEST3');
     
-    it('should handle an empty array of buffers', async () => {
-      // ACT: Pass an empty array
-      const resultBuffer = await mergePdfs([]);
-      
-      // ASSERT:
-      expect(Buffer.isBuffer(resultBuffer)).toBe(true);
-      expect(resultBuffer.toString().startsWith('%PDF-')).toBe(true);
-    });
+    // ACT: Merge the PDFs using the public API
+    const mergedPdfBuffer = await mergePdfs([pdf1, pdf2, pdf3]);
+    
+    // ASSERT:
+    // 1. Result is a Buffer
+    expect(Buffer.isBuffer(mergedPdfBuffer)).toBe(true);
+    
+    // 2. Result contains content from all source PDFs
+    const extractedContent = await extractTextContent(mergedPdfBuffer);
+    expect(extractedContent.includes('TEST1')).toBe(true);
+    expect(extractedContent.includes('TEST2')).toBe(true);
+    expect(extractedContent.includes('TEST3')).toBe(true);
   });
 
-  describe('appendPdfs', () => {
-    it('should append pages from source PDF to target PDF', async () => {
-      // ARRANGE: Create test PDF buffers with unique identifiers
-      const sourcePdf = await createTestPdfBuffer('SOURCE');
-      const targetPdf = await createTestPdfBuffer('TARGET');
-      
-      // ACT: Append source to target
-      const result = await appendPdfs(sourcePdf, targetPdf);
-      
-      // ASSERT:
-      expect(result.success).toBe(true);
-      expect(result.pagesAdded).toBeGreaterThan(0);
-      expect(Buffer.isBuffer(result.buffer)).toBe(true);
-      
-      // Check that the resulting PDF contains content from both PDFs
-      const extractedContent = await extractTextContent(result.buffer);
-      expect(extractedContent.includes('SOURCE')).toBe(true);
-      expect(extractedContent.includes('TARGET')).toBe(true);
-    });
+  it('should merge PDFs when provided as individual arguments', async () => {
+    // ARRANGE: Create test PDF buffers
+    const pdf1 = await createTestPdfBuffer('ARG1');
+    const pdf2 = await createTestPdfBuffer('ARG2');
+    
+    // ACT: Merge using individual arguments syntax
+    const mergedPdfBuffer = await mergePdfs(pdf1, pdf2);
+    
+    // ASSERT:
+    expect(Buffer.isBuffer(mergedPdfBuffer)).toBe(true);
+    
+    const extractedContent = await extractTextContent(mergedPdfBuffer);
+    expect(extractedContent.includes('ARG1')).toBe(true);
+    expect(extractedContent.includes('ARG2')).toBe(true);
+  });
 
-    it('should handle empty source PDF gracefully', async () => {
-      // ARRANGE: Create an empty source PDF and a target PDF
-      const emptyPdf = Buffer.from('%PDF-1.7\ntrailer<</Root 1 0 R>>\n%%EOF');
-      const targetPdf = await createTestPdfBuffer('TARGET');
-      
-      // ACT: Append empty source to target
-      const result = await appendPdfs(emptyPdf, targetPdf);
-      
-      // ASSERT:
-      expect(result.success).toBe(true);
-      // The exact pagesAdded value depends on how pdf-lib handles empty PDFs
-      expect(Buffer.isBuffer(result.buffer)).toBe(true);
-    });
+  it('should create a valid PDF when no inputs are provided', async () => {
+    // ACT: Call with no arguments
+    const resultBuffer = await mergePdfs();
+    
+    // ASSERT:
+    expect(Buffer.isBuffer(resultBuffer)).toBe(true);
+    // The result should be a valid PDF starting with the PDF header
+    expect(resultBuffer.toString().startsWith('%PDF-')).toBe(true);
+  });
+  
+  it('should handle an empty array of buffers', async () => {
+    // ACT: Pass an empty array
+    const resultBuffer = await mergePdfs([]);
+    
+    // ASSERT:
+    expect(Buffer.isBuffer(resultBuffer)).toBe(true);
+    expect(resultBuffer.toString().startsWith('%PDF-')).toBe(true);
+  });
+});
+
+describe('appendPdfs', () => {
+  it('should append pages from source PDF to target PDF', async () => {
+    // ARRANGE: Create test PDF buffers with unique identifiers
+    const sourcePdf = await createTestPdfBuffer('SOURCE');
+    const targetPdf = await createTestPdfBuffer('TARGET');
+    
+    // ACT: Append source to target
+    const result = await appendPdfs(sourcePdf, targetPdf);
+    
+    // ASSERT:
+    expect(result.success).toBe(true);
+    expect(result.pagesAdded).toBeGreaterThan(0);
+    expect(Buffer.isBuffer(result.buffer)).toBe(true);
+    
+    // Check that the resulting PDF contains content from both PDFs
+    const extractedContent = await extractTextContent(result.buffer);
+    expect(extractedContent.includes('SOURCE')).toBe(true);
+    expect(extractedContent.includes('TARGET')).toBe(true);
+  });
+
+  it('should handle empty source PDF gracefully', async () => {
+    // ARRANGE: Create an empty source PDF and a target PDF
+    const emptyPdf = Buffer.from('%PDF-1.7\ntrailer<</Root 1 0 R>>\n%%EOF');
+    const targetPdf = await createTestPdfBuffer('TARGET');
+    
+    // ACT: Append empty source to target
+    const result = await appendPdfs(emptyPdf, targetPdf);
+    
+    // ASSERT:
+    expect(result.success).toBe(true);
+    // The exact pagesAdded value depends on how pdf-lib handles empty PDFs
+    expect(Buffer.isBuffer(result.buffer)).toBe(true);
   });
 });
