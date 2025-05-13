@@ -26,7 +26,7 @@ const _appendPdfToDoc = async (sourceBuffer, targetDoc) => {
     });
     return { success: true, pagesAdded: copiedPages.length };
   } catch (error) {
-    return { success: false, error, pagesAdded: 0 }; // Ensure pagesAdded is 0 on error
+    return { success: false, error, pagesAdded: 0 };
   }
 };
 
