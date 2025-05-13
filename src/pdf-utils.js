@@ -32,38 +32,45 @@ const appendPdfPages = async (sourceBuffer, targetDoc) => {
 
 /**
  * Merges multiple PDF buffers into a single PDF buffer, purely in-memory.
- * If an empty array is provided, it returns a new, empty PDF document.
+ * This function accepts either:
+ * - Multiple Buffer arguments: mergePdfs(pdf1, pdf2, ...)
+ * - A single array of Buffers: mergePdfs([pdf1, pdf2, ...])
+ * 
+ * If no PDFs are provided (empty array or no arguments), it returns a new empty PDF document.
  *
- * @param {Array<Buffer>} pdfBuffers An array of PDF buffers to merge.
- * @returns {Promise<Buffer>} A buffer representing the merged PDF.
- * @throws {Error} If any error occurs during the merging process.
+ * @param {...Buffer|Buffer[]} pdfBuffers One or more PDF buffers, or an array of PDF buffers
+ * @returns {Promise<Buffer>} A buffer representing the merged PDF
+ * @throws {Error} If any error occurs during the merging process
  */
-const mergePdfs = async (pdfBuffers) => {
-  // Removed the check for empty pdfBuffers to allow creating an empty PDF.
-  // if (!Array.isArray(pdfBuffers) || pdfBuffers.length === 0) {
-  //   throw new Error('Input must be a non-empty array of PDF buffers.');
-  // }
-
-  let newPdfDoc;
+const mergePdfs = async (...args) => {
+  let pdfBuffers;
+  
+  // Handle both function call styles: mergePdfs(pdf1, pdf2) and mergePdfs([pdf1, pdf2])
+  if (args.length === 1 && Array.isArray(args[0])) {
+    // Called as mergePdfs([pdf1, pdf2])
+    pdfBuffers = args[0];
+  } else {
+    // Called as mergePdfs(pdf1, pdf2)
+    pdfBuffers = args;
+  }
+  
   try {
-    newPdfDoc = await PDFDocument.create();
-
-    // Only iterate if pdfBuffers is not empty
-    if (Array.isArray(pdfBuffers) && pdfBuffers.length > 0) {
-      for (const pdfBuffer of pdfBuffers) {
-        const result = await appendPdfPages(pdfBuffer, newPdfDoc);
-        if (!result.success) {
-          // Propagate the error from appendPdfPages
-          throw result.error; // result.error should be an Error object
-        }
+    const newPdfDoc = await PDFDocument.create();
+    
+    // Process each PDF buffer
+    for (const pdfBuffer of pdfBuffers) {
+      const result = await appendPdfPages(pdfBuffer, newPdfDoc);
+      if (!result.success) {
+        // Propagate the error from appendPdfPages
+        throw result.error;
       }
     }
+    
     return await newPdfDoc.save();
   } catch (error) {
-    // Ensure a more descriptive error is thrown if it originates here or is re-thrown.
-    // Check if error already has a message, otherwise use a generic one.
+    // Ensure a more descriptive error is thrown
     const errorMessage = error.message ? error.message : 'Unknown error during PDF merge';
-    throw new Error(`Failed to merge PDFs: ${errorMessage}`);
+    throw new Error("Failed to merge PDFs: " + errorMessage);
   }
 };
 

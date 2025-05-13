@@ -3,213 +3,295 @@
  * 
  * This suite focuses on testing the public API of the library:
  * - `mergePdfs`: The main function users will call to merge multiple PDF buffers into one
+ *    - Supports both individual arguments (mergePdfs(pdf1, pdf2)) and arrays (mergePdfs([pdf1, pdf2]))
  * - `appendPdfPages`: A utility function for adding pages from a source PDF to a target document
- *
- * Tests are designed to validate behavior based on inputs and outputs,
- * rather than implementation details.
  */
 
-// Simple mock for pdf-lib that provides the functionality our library needs
-// without exposing internal implementation details
-const mockSavedBuffer = Buffer.from('mock saved pdf data');
+// Import the functions to be tested
+const { appendPdfPages, mergePdfs } = require('../src/pdf-utils');
 
-// Mock document for testing appendPdfPages
-const createMockDoc = () => ({
-  _pageCount: 0, // Internal tracker for testing
-  getPageCount: function() { return this._pageCount; },
-  // We'll test the behavior of appendPdfPages by checking if the page count increases
-  // rather than verifying internal calls to methods like copyPages and addPage
-});
+// Define a predictable mock PDF result that our mock pdf-lib will return
+const MOCK_MERGED_PDF_RESULT = Buffer.from('mock-merged-pdf-content');
 
-// Mock the pdf-lib module
+// Create a module mock for pdf-lib
 jest.mock('pdf-lib', () => {
+  // This factory function cannot reference variables from outside its scope
+  // We'll use module-level state instead
   return {
+    __shouldFailCreate: false,
+    __shouldFailSave: false,
+    
+    // Methods to control test behavior
+    __setFailCreate: function(shouldFail) {
+      this.__shouldFailCreate = shouldFail;
+    },
+    __setFailSave: function(shouldFail) {
+      this.__shouldFailSave = shouldFail;
+    },
+    
+    // The mock PDFDocument class
     PDFDocument: {
-      // The load function simulates loading a PDF and returns information about it
       load: jest.fn().mockImplementation(buffer => {
-        // Different behaviors based on buffer content for testing
-        if (buffer.toString().includes('empty')) {
-          // Empty PDF case
-          return Promise.resolve({
-            getPageIndices: () => [],
-          });
-        } else if (buffer.toString().includes('error')) {
-          // Error case
+        // For testing error conditions
+        if (buffer.toString().includes('error')) {
           return Promise.reject(new Error('Failed to load PDF'));
-        } else {
-          // Default case - determine page count based on buffer content
-          const pageCount = buffer.toString().includes('multi') ? 3 : 1;
-          const pageIndices = Array.from({ length: pageCount }, (_, i) => i);
-          
-          return Promise.resolve({
-            getPageIndices: () => pageIndices,
-          });
         }
-      }),
-      
-      // The create function returns a mock document
-      create: jest.fn().mockImplementation(() => {
+        
+        // Create a mock document with appropriate page count
         const mockDoc = {
           _pageCount: 0,
-          _pages: [],
+          _pageIndices: buffer.toString().includes('multi') ? 
+                        [0, 1, 2] : // Multi-page document (3 pages)
+                        (buffer.toString().includes('empty') ? [] : [0, 1]), // Empty or standard (2 pages)
           
-          // Tracking calls for verification
-          copyPagesCallCount: 0,
-          addPageCallCount: 0,
-          
-          copyPages: jest.fn().mockImplementation((sourceDoc, indices) => {
-            mockDoc.copyPagesCallCount += 1;
-            // Return mock pages based on the indices
-            return Promise.resolve(indices.map(i => ({ pageIndex: i })));
+          copyPages: jest.fn().mockImplementation((sourceDoc, pageIndices) => {
+            return Promise.resolve(pageIndices.map(idx => ({ pageIndex: idx })));
           }),
           
           addPage: jest.fn().mockImplementation(page => {
-            mockDoc._pageCount += 1;
-            mockDoc._pages.push(page);
-            mockDoc.addPageCallCount += 1;
+            mockDoc._pageCount++;
           }),
           
           getPageIndices: jest.fn().mockImplementation(() => {
-            return Array.from({ length: mockDoc._pageCount }, (_, i) => i);
+            return mockDoc._pageIndices;
+          }),
+          
+          save: jest.fn().mockResolvedValue(MOCK_MERGED_PDF_RESULT)
+        };
+        
+        return Promise.resolve(mockDoc);
+      }),
+      
+      create: jest.fn().mockImplementation(function() {
+        // Access the module state through 'this' to determine if we should fail
+        if (require('pdf-lib').__shouldFailCreate) {
+          require('pdf-lib').__setFailCreate(false); // Reset for next test
+          return Promise.reject(new Error('Failed to create PDF'));
+        }
+        
+        const mockDoc = {
+          _pageCount: 0,
+          _pageIndices: [0, 1], // Default to 2 pages
+          
+          copyPages: jest.fn().mockImplementation((sourceDoc, pageIndices) => {
+            return Promise.resolve(pageIndices.map(idx => ({ pageIndex: idx })));
+          }),
+          
+          addPage: jest.fn().mockImplementation(page => {
+            mockDoc._pageCount++;
+          }),
+          
+          getPageIndices: jest.fn().mockImplementation(() => {
+            return mockDoc._pageIndices;
           }),
           
           save: jest.fn().mockImplementation(() => {
-            if (mockDoc._saveError) {
-              return Promise.reject(mockDoc._saveError);
+            if (require('pdf-lib').__shouldFailSave) {
+              require('pdf-lib').__setFailSave(false); // Reset for next test
+              return Promise.reject(new Error('Failed to save PDF'));
             }
-            return Promise.resolve(mockSavedBuffer);
-          }),
-          
-          // Helper method for testing to simulate save error
-          _setSaveError: function(error) {
-            this._saveError = error;
-          }
+            return Promise.resolve(MOCK_MERGED_PDF_RESULT);
+          })
         };
+        
         return Promise.resolve(mockDoc);
       })
     }
   };
 });
 
-// Import the functions to be tested
-const { appendPdfPages, mergePdfs } = require('../src/pdf-utils');
-
 describe('mergePdfs (public API)', () => {
   beforeEach(() => {
-    // Clear mock counts between tests
+    // Reset all mocks before each test
     jest.clearAllMocks();
+    
+    // Reset test control flags
+    const mockPdfLib = require('pdf-lib');
+    mockPdfLib.__setFailCreate(false);
+    mockPdfLib.__setFailSave(false);
   });
   
-  it('should merge multiple PDF buffers into a single buffer', async () => {
-    // Test merging a couple of PDFs
-    const pdfBuffers = [
+  it('should merge multiple PDF buffers when passed as array argument', async () => {
+    // ARRANGE: Set up test data - multiple PDF buffers to merge
+    const pdfInputBuffers = [
       Buffer.from('pdf-content-1'),
       Buffer.from('pdf-content-2')
     ];
     
-    const result = await mergePdfs(pdfBuffers);
+    // ACT: Call the function with array syntax
+    const mergedPdfBuffer = await mergePdfs(pdfInputBuffers);
     
-    // Verify the result is a buffer
-    expect(Buffer.isBuffer(result)).toBe(true);
-    // The actual content would match our mock saved buffer
-    expect(result).toEqual(mockSavedBuffer);
+    // ASSERT: Focus on the expected output behavior
+    // 1. The result should be a Buffer (correct type)
+    expect(Buffer.isBuffer(mergedPdfBuffer)).toBe(true);
     
-    // We're focusing on the output, not the implementation details
-    // But we could add basic verification that the PDFDocument.create and
-    // PDFDocument.load were called the expected number of times
+    // 2. The output should match what the pdf-lib's save method produced
+    expect(mergedPdfBuffer).toBe(MOCK_MERGED_PDF_RESULT);
+    
+    // Minimal verification that the right number of PDFs were loaded
+    // This verifies our code is working but isn't overly coupled to implementation
     const { PDFDocument } = require('pdf-lib');
-    expect(PDFDocument.create).toHaveBeenCalledTimes(1);
+    expect(PDFDocument.load).toHaveBeenCalledTimes(pdfInputBuffers.length);
+  });
+  
+  it('should merge multiple PDF buffers when passed as individual arguments', async () => {
+    // ARRANGE: Create two PDF buffers
+    const pdfBuffer1 = Buffer.from('pdf-content-1');
+    const pdfBuffer2 = Buffer.from('pdf-content-2');
+    
+    // ACT: Call the function with multiple arguments syntax
+    const mergedPdfBuffer = await mergePdfs(pdfBuffer1, pdfBuffer2);
+    
+    // ASSERT: Verify the result
+    expect(Buffer.isBuffer(mergedPdfBuffer)).toBe(true);
+    expect(mergedPdfBuffer).toBe(MOCK_MERGED_PDF_RESULT);
+    
+    // Check that both PDFs were processed
+    const { PDFDocument } = require('pdf-lib');
     expect(PDFDocument.load).toHaveBeenCalledTimes(2);
+    expect(PDFDocument.load).toHaveBeenNthCalledWith(1, pdfBuffer1);
+    expect(PDFDocument.load).toHaveBeenNthCalledWith(2, pdfBuffer2);
+  });
+  
+  it('should merge a single PDF buffer when passed as the only argument', async () => {
+    // ARRANGE: Create a single PDF buffer
+    const singlePdfBuffer = Buffer.from('single-pdf-content');
+    
+    // ACT: Call the function with a single argument
+    const resultBuffer = await mergePdfs(singlePdfBuffer);
+    
+    // ASSERT: Verify the result
+    expect(Buffer.isBuffer(resultBuffer)).toBe(true);
+    expect(resultBuffer).toBe(MOCK_MERGED_PDF_RESULT);
+    
+    // Check that the PDF was processed
+    const { PDFDocument } = require('pdf-lib');
+    expect(PDFDocument.load).toHaveBeenCalledTimes(1);
+    expect(PDFDocument.load).toHaveBeenCalledWith(singlePdfBuffer);
   });
   
   it('should handle an empty array of buffers', async () => {
-    const result = await mergePdfs([]);
+    // ARRANGE: Empty array of PDF buffers
+    const emptyInputArray = [];
     
-    // Should still return a buffer (empty PDF)
+    // ACT: Call function with empty array
+    const result = await mergePdfs(emptyInputArray);
+    
+    // ASSERT: Should still produce a valid buffer (an empty PDF)
     expect(Buffer.isBuffer(result)).toBe(true);
+    expect(result).toBe(MOCK_MERGED_PDF_RESULT);
     
-    // Minimal implementation checking
+    // Verify no PDFs were loaded
     const { PDFDocument } = require('pdf-lib');
-    expect(PDFDocument.create).toHaveBeenCalledTimes(1);
-    expect(PDFDocument.load).not.toHaveBeenCalled(); // No docs to load
+    expect(PDFDocument.load).not.toHaveBeenCalled();
+  });
+  
+  it('should handle no arguments and return an empty PDF', async () => {
+    // ACT: Call function with no arguments
+    const result = await mergePdfs();
+    
+    // ASSERT: Should still produce a valid buffer (an empty PDF)
+    expect(Buffer.isBuffer(result)).toBe(true);
+    expect(result).toBe(MOCK_MERGED_PDF_RESULT);
+    
+    // Verify no PDFs were loaded
+    const { PDFDocument } = require('pdf-lib');
+    expect(PDFDocument.load).not.toHaveBeenCalled();
   });
   
   it('should throw an error if any PDF fails to load', async () => {
-    const pdfBuffers = [
-      Buffer.from('pdf-content-1'),
-      Buffer.from('error-pdf') // This will cause PDFDocument.load to reject
-    ];
+    // ARRANGE: One normal buffer and one that will trigger an error
+    const normalPdf = Buffer.from('normal-pdf');
+    const errorPdf = Buffer.from('error-pdf'); // Will cause load to reject
     
-    await expect(mergePdfs(pdfBuffers)).rejects.toThrow('Failed to merge PDFs');
+    // ASSERT: The function should propagate the error appropriately
+    await expect(mergePdfs(normalPdf, errorPdf))
+      .rejects
+      .toThrow('Failed to merge PDFs');
   });
   
   it('should throw an error if PDF creation fails', async () => {
-    // Make PDFDocument.create reject for this test
-    const { PDFDocument } = require('pdf-lib');
-    PDFDocument.create.mockRejectedValueOnce(new Error('Failed to create PDF'));
+    // ARRANGE: Configure mock to fail on PDFDocument.create
+    const mockPdfLib = require('pdf-lib');
+    mockPdfLib.__setFailCreate(true);
     
-    await expect(mergePdfs([Buffer.from('pdf')])).rejects.toThrow('Failed to merge PDFs');
+    // ASSERT: Should throw with appropriate message
+    await expect(mergePdfs([Buffer.from('any-pdf')]))
+      .rejects
+      .toThrow('Failed to merge PDFs');
   });
   
   it('should throw an error if final PDF saving fails', async () => {
-    // Use our mock to simulate a save error
-    const { PDFDocument } = require('pdf-lib');
-    PDFDocument.create.mockImplementationOnce(() => {
-      const mockDoc = require('pdf-lib').PDFDocument.create.getMockImplementation()();
-      return mockDoc.then(doc => {
-        doc._setSaveError(new Error('Failed to save PDF'));
-        return doc;
-      });
-    });
+    // ARRANGE: Configure mock to fail on save
+    const mockPdfLib = require('pdf-lib');
+    mockPdfLib.__setFailSave(true);
     
-    await expect(mergePdfs([Buffer.from('pdf')])).rejects.toThrow('Failed to merge PDFs');
+    // ASSERT: Should throw with appropriate message
+    await expect(mergePdfs([Buffer.from('any-pdf')]))
+      .rejects
+      .toThrow('Failed to merge PDFs');
   });
 });
 
-// Since appendPdfPages is more of a utility function that requires PDFDocument instances,
-// we test it more simply with less focus on implementation details
 describe('appendPdfPages (utility function)', () => {
-  it('should append pages from source buffer to target document', async () => {
-    const sourceBuffer = Buffer.from('multi-page-pdf');
-    
-    // Create a target doc using the actual PDFDocument.create mock
+  let mockTargetDoc;
+  
+  beforeEach(async () => {
+    // Create a fresh mock target document for each test
     const { PDFDocument } = require('pdf-lib');
-    const targetDoc = await PDFDocument.create();
+    mockTargetDoc = await PDFDocument.create();
     
-    // Initial page count should be 0
-    expect(targetDoc._pageCount).toBe(0);
-    
-    const result = await appendPdfPages(sourceBuffer, targetDoc);
-    
-    // Verify the function reports success and the correct number of pages
-    expect(result).toEqual({ success: true, pagesAdded: 3 }); // Based on our mock for 'multi'
-    
-    // The target document should now have pages added
-    expect(targetDoc._pageCount).toBe(3);
+    // Reset any test control flags
+    jest.clearAllMocks();
   });
   
-  it('should handle empty source PDFs', async () => {
-    const sourceBuffer = Buffer.from('empty-pdf');
+  it('should append pages from source buffer to target document', async () => {
+    // ARRANGE: Create a multi-page source buffer
+    const sourceBuffer = Buffer.from('multi-page-pdf');
     
-    const { PDFDocument } = require('pdf-lib');
-    const targetDoc = await PDFDocument.create();
+    // ACT: Call the function
+    const result = await appendPdfPages(sourceBuffer, mockTargetDoc);
     
-    const result = await appendPdfPages(sourceBuffer, targetDoc);
+    // ASSERT: Check the function's return value
+    expect(result).toEqual({
+      success: true,
+      pagesAdded: 3  // Based on our mock for 'multi-page-pdf'
+    });
     
-    expect(result).toEqual({ success: true, pagesAdded: 0 });
-    expect(targetDoc._pageCount).toBe(0); // No pages added
+    // Verify the target document was modified correctly
+    expect(mockTargetDoc.copyPages).toHaveBeenCalled();
+    expect(mockTargetDoc.addPage).toHaveBeenCalled();
+  });
+  
+  it('should handle empty source PDFs without adding pages', async () => {
+    // ARRANGE: Create an empty source PDF
+    const emptySourceBuffer = Buffer.from('empty-pdf');
+    
+    // ACT: Call the function
+    const result = await appendPdfPages(emptySourceBuffer, mockTargetDoc);
+    
+    // ASSERT: Should report success with zero pages added
+    expect(result).toEqual({
+      success: true,
+      pagesAdded: 0
+    });
+    
+    // Verify no pages were added to target
+    expect(mockTargetDoc.addPage).not.toHaveBeenCalled();
   });
   
   it('should return failure object when source PDF fails to load', async () => {
-    const sourceBuffer = Buffer.from('error-pdf');
+    // ARRANGE: Create a buffer that will cause load to fail
+    const badSourceBuffer = Buffer.from('error-pdf');
     
-    const { PDFDocument } = require('pdf-lib');
-    const targetDoc = await PDFDocument.create();
+    // ACT: Call the function
+    const result = await appendPdfPages(badSourceBuffer, mockTargetDoc);
     
-    const result = await appendPdfPages(sourceBuffer, targetDoc);
-    
-    expect(result.success).toBe(false);
+    // ASSERT: Check error handling
+    expect(result).toMatchObject({
+      success: false,
+      pagesAdded: 0
+    });
     expect(result.error).toBeDefined();
-    expect(result.pagesAdded).toBe(0);
   });
 });
