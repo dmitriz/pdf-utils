@@ -127,42 +127,6 @@ const mergePdfs = async (...args) => {
 };
 
 /**
- * Ensures that a directory exists, creating it if necessary
- * 
- * @param {Object} params - Parameters
- * @param {string} params.dirPath - Directory path to ensure exists
- * @returns {Promise<{success: boolean, path: string, error?: Error}>} Result object
- */
-const ensureDirectoryExists = async ({ dirPath }) => {
-  try {
-    await fs.mkdir(dirPath, { recursive: true });
-    return {
-      success: true,
-      path: dirPath
-    };
-  } catch (error) {
-    // Check if directory exists despite error (could be permission related)
-    try {
-      const stats = await fs.stat(dirPath);
-      if (stats.isDirectory()) {
-        return {
-          success: true,
-          path: dirPath
-        };
-      }
-    } catch (_) {
-      // Ignore error checking directory
-    }
-    
-    return {
-      success: false,
-      path: dirPath,
-      error
-    };
-  }
-};
-
-/**
  * Save a PDF buffer to a file
  * 
  * @param {Object} params - Parameters
@@ -230,10 +194,49 @@ const mergePdfsFromDisk = async ({ pdfPaths, outputPath, allowOutsideBaseDir = f
   }
 };
 
+/**
+ * Ensures that a directory exists, creating it if necessary
+ * 
+ * @param {Object} params - Parameters
+ * @param {string} params.dirPath - Directory path to ensure exists
+ * @returns {Promise<{success: boolean, path: string, error?: Error}>} Result object
+ */
+const ensureDirectoryExists = async ({ dirPath }) => {
+  try {
+    await fs.mkdir(dirPath, { recursive: true });
+    return {
+      success: true,
+      path: dirPath
+    };
+  } catch (error) {
+    // Check if directory exists despite error (could be permission related)
+    try {
+      const stats = await fs.stat(dirPath);
+      if (stats.isDirectory()) {
+        return {
+          success: true,
+          path: dirPath
+        };
+      }
+    } catch (_) {
+      // Ignore error checking directory
+    }
+    
+    return {
+      success: false,
+      path: dirPath,
+      error
+    };
+  }
+};
+
+// We export the memory version of mergePdfs as 'mergePdfsInMemory' 
+// and use 'mergePdfs' for the disk version to match what index.js expects
 module.exports = {
   appendPdfs,
-  mergePdfs,
+  mergePdfsInMemory: mergePdfs,  // In-memory version renamed
   savePdf,
-  ensureDirectoryExists,
-  mergePdfsFromDisk
+  mergePdfsFromDisk,
+  mergePdfs: mergePdfsFromDisk,  // Default export is disk version
+  ensureDirectoryExists
 };

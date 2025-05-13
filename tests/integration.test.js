@@ -6,6 +6,7 @@
  */
 
 const { mergePdfs, appendPdfs } = require('../src/pdf-utils');
+const { PDFDocument } = require('pdf-lib');
 
 // Simple helper to create a valid PDF buffer with a specific "signature"
 const createTestPdfBuffer = async (identifier) => {
@@ -39,6 +40,16 @@ const extractTextContent = async (pdfBuffer) => {
   // For this test, we'll just check if the buffer contains our identifiers
   const content = pdfBuffer.toString();
   return content;
+};
+
+// Helper to create a real PDF buffer with a given number of blank pages
+const createRealPdfBuffer = async (pageCount) => {
+  const pdfDoc = await PDFDocument.create();
+  for (let i = 0; i < pageCount; i++) {
+    pdfDoc.addPage();
+  }
+  const bytes = await pdfDoc.save();
+  return Buffer.from(bytes);
 };
 
 describe('mergePdfs', () => {
@@ -130,5 +141,27 @@ describe('appendPdfs', () => {
     expect(result.success).toBe(true);
     // The exact pagesAdded value depends on how pdf-lib handles empty PDFs
     expect(Buffer.isBuffer(result.buffer)).toBe(true);
+  });
+});
+
+describe('PDF operations with real PDFDocument', () => {
+  it('should merge real PDF buffers and verify page count', async () => {
+    const pdf1 = await createRealPdfBuffer(1);
+    const pdf2 = await createRealPdfBuffer(2);
+    const mergedBuffer = await mergePdfs(pdf1, pdf2);
+    expect(Buffer.isBuffer(mergedBuffer)).toBe(true);
+    const mergedDoc = await PDFDocument.load(mergedBuffer);
+    expect(mergedDoc.getPageCount()).toBe(3);
+  });
+
+  it('should append pages using real PDFDocument and verify success and page count', async () => {
+    const targetPdf = await createRealPdfBuffer(1);
+    const sourcePdf = await createRealPdfBuffer(2);
+    const result = await appendPdfs(sourcePdf, targetPdf);
+    expect(result.success).toBe(true);
+    expect(result.pagesAdded).toBe(2);
+    expect(Buffer.isBuffer(result.buffer)).toBe(true);
+    const finalDoc = await PDFDocument.load(result.buffer);
+    expect(finalDoc.getPageCount()).toBe(3);
   });
 });
