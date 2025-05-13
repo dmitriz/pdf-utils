@@ -26,10 +26,6 @@ const _appendPdfToDoc = async (sourceBuffer, targetDoc) => {
     });
     return { success: true, pagesAdded: copiedPages.length };
   } catch (error) {
-    // If buffer looks like a PDF but load fails, treat as empty PDF (no pages to append)
-    if (sourceBuffer.slice(0,5).toString() === '%PDF-') {
-      return { success: true, pagesAdded: 0 };
-    }
     return { success: false, error, pagesAdded: 0 };
   }
 };
