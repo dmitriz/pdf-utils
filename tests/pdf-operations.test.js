@@ -13,76 +13,10 @@
 const fs = require('fs');
 const { PDFDocument } = require('pdf-lib');
 const {
-  ensureDirectoryExists,
+  // ensureDirectoryExists, // Removed
   appendPdfPages, // Renamed from processSinglePdf
   mergePdfs,
 } = require('../src/pdf-utils');
-
-/**
- * Tests for `ensureDirectoryExists(dirPath)`
- *
- * This utility function checks if a directory exists at the given path.
- * If it doesn't exist, it attempts to create it recursively.
- * It returns an object indicating success or failure.
- */
-describe('ensureDirectoryExists', () => {
-  beforeEach(() => {
-    // Clear all mocks before each test to ensure test isolation.
-    jest.clearAllMocks();
-  });
-
-  test('should create directory if it does not exist', () => {
-    // Arrange: Mock fs.existsSync to return false (directory doesn't exist).
-    // Mock fs.mkdirSync to track its call.
-    const dirPath = '/test/new-dir';
-    jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-    jest.spyOn(fs, 'mkdirSync').mockReturnValue(undefined); // Mock implementation
-
-    // Act: Call the function under test.
-    const result = ensureDirectoryExists(dirPath);
-
-    // Assert: Verify that file system checks and operations were performed as expected.
-    expect(fs.existsSync).toHaveBeenCalledWith(dirPath);
-    expect(fs.mkdirSync).toHaveBeenCalledWith(dirPath, { recursive: true });
-    expect(result).toEqual({ success: true, dirPath });
-  });
-
-  test('should not attempt to create directory if it already exists', () => {
-    // Arrange: Mock fs.existsSync to return true (directory exists).
-    const dirPath = '/test/existing-dir';
-    jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-    jest.spyOn(fs, 'mkdirSync'); // Spy without custom implementation
-
-    // Act: Call the function under test.
-    const result = ensureDirectoryExists(dirPath);
-
-    // Assert: Verify that directory creation was not attempted.
-    expect(fs.existsSync).toHaveBeenCalledWith(dirPath);
-    expect(fs.mkdirSync).not.toHaveBeenCalled();
-    expect(result).toEqual({ success: true, dirPath });
-  });
-
-  test('should return a failure object if fs.mkdirSync throws an error', () => {
-    // Arrange: Mock fs.existsSync to return false.
-    // Mock fs.mkdirSync to throw an error.
-    const dirPath = '/test/problem-dir';
-    const mkdirError = new Error('Permission denied');
-    jest.spyOn(fs, 'existsSync').mockReturnValue(false);
-    jest.spyOn(fs, 'mkdirSync').mockImplementation(() => {
-      throw mkdirError;
-    });
-
-    // Act: Call the function under test.
-    const result = ensureDirectoryExists(dirPath);
-
-    // Assert: Verify that the function returns a failure object containing the error.
-    expect(result.success).toBe(false);
-    expect(result.error).toBeInstanceOf(Error);
-    // The error message in pdf-utils.js prepends "Failed to create directory..."
-    expect(result.error.message).toBe(`Failed to create directory ${dirPath}: ${mkdirError.message}`);
-  });
-});
-
 
 /**
  * Tests for `appendPdfPages(sourcePdfBuffer, targetPdfDoc)`
