@@ -2,215 +2,233 @@
  * Test suite for PDF utility functions: appendPdfPages, and mergePdfs.
  *
  * - `appendPdfPages`: Verifies that pages from a source PDF buffer are correctly appended
- *   to a target PDFDocument instance provided by `pdf-lib`.
- * - `mergePdfs`: Ensures multiple PDF buffers are correctly merged into a single PDF buffer
- *   by creating a new PDFDocument and sequentially appending pages from each source buffer.
- */
-
-// Node.js 'fs' module is not directly used by the functions under test here anymore,
-// but Jest's default automocking behavior might still be in play for other indirect dependencies if any.
-// const fs = require('fs'); // fs is no longer used directly by the tested utils
-const { PDFDocument } = require('pdf-lib');
-const {
-  // ensureDirectoryExists, // Removed
-  appendPdfPages, // Renamed from processSinglePdf
-  mergePdfs,
-} = require('../src/pdf-utils');
-
-/**
- * Tests for `appendPdfPages(sourcePdfBuffer, targetPdfDoc)`
+ *   to a target PDFDocument instance.
+ * - `mergePdfs`: Ensures multiple PDF buffers are correctly merged into a single PDF buffer.
  *
- * `appendPdfPages` takes a raw PDF buffer (source) and a `pdf-lib` PDFDocument
- * instance (target). It loads the source buffer into a new (temporary) PDFDocument,
- * then copies all pages from this temporary document into the provided target document.
- * It's a core operation for merging PDFs.
+ * This test suite uses module-level mocking for 'pdf-lib' to isolate pdf-utils
+ * from the actual implementation of the PDF library.
  */
+
+// --- Mock Setup for 'pdf-lib' ---
+// These will hold the mock functions for PDFDocument static and instance methods
+const mockPdfLibStatic = {
+  load: jest.fn(),
+  create: jest.fn(),
+};
+
+// Helper to create fresh mock instances for PDF documents each time they're needed.
+// This ensures test isolation, where one test's mock instance doesn't affect another.
+const createMockPdfDocInstance = () => ({
+  copyPages: jest.fn().mockResolvedValue(['mockPageObject1', 'mockPageObject2']), // Default for success
+  addPage: jest.fn(),
+  save: jest.fn().mockResolvedValue(Buffer.from('mock saved pdf data')), // Default for success
+  getPageIndices: jest.fn().mockReturnValue([0, 1]), // Default for 2 pages
+});
+
+jest.mock('pdf-lib', () => ({
+  PDFDocument: mockPdfLibStatic,
+  // If pdf-utils.js starts using other exports like rgb, StandardFonts, etc.,
+  // they would need to be mocked here as well.
+  // e.g., rgb: jest.fn(), StandardFonts: { Helvetica: 'mockHelveticaFont' }
+}));
+// --- End Mock Setup ---
+
+// Import the functions to be tested *after* setting up the mocks.
+const { appendPdfPages, mergePdfs } = require('../src/pdf-utils');
+
 describe('appendPdfPages', () => {
-  let mockTargetDoc; // Mock of the target PDFDocument instance (passed as argument)
-  let mockLoadedSourceDoc; // Mock of the PDFDocument instance returned by PDFDocument.load()
+  let mockTargetDoc; // This is the PDFDocument instance passed as an argument to appendPdfPages
+  let mockLoadedSourceDoc; // This is the PDFDocument instance resolved by PDFDocument.load()
 
   beforeEach(() => {
-    // This mock represents the PDFDocument instance to which pages will be appended.
-    mockTargetDoc = {
-      copyPages: jest.fn().mockResolvedValue(['mockPageObject1', 'mockPageObject2']), // Simulates successfully copied page objects
-      addPage: jest.fn(), // Used to track calls when adding pages to the target document
-    };
+    // Reset all mock functions in the static interface of PDFDocument
+    mockPdfLibStatic.load.mockReset();
+    // mockPdfLibStatic.create.mockReset(); // Not directly used by appendPdfPages
 
-    // This mock represents the PDFDocument instance that `PDFDocument.load(sourcePdfBuffer)`
-    // would resolve to. It needs `getPageIndices` for `targetDoc.copyPages`.
-    mockLoadedSourceDoc = {
-      getPageIndices: jest.fn().mockReturnValue([0, 1]), // Default: simulates a 2-page source PDF
-    };
+    // Create fresh mock instances for this test
+    mockTargetDoc = createMockPdfDocInstance();
+    mockLoadedSourceDoc = createMockPdfDocInstance();
 
-    // Spy on `PDFDocument.load` (static method) to control its behavior.
-    // When `appendPdfPages` calls `PDFDocument.load(buffer)`, it will resolve to `mockLoadedSourceDoc`.
-    jest.spyOn(PDFDocument, 'load').mockResolvedValue(mockLoadedSourceDoc);
-  });
-
-  afterEach(() => {
-    // Restore all mocks to their original implementations after each test.
-    jest.restoreAllMocks();
+    // Configure the behavior of the mocked PDFDocument.load static method
+    // to return our mockLoadedSourceDoc when called by appendPdfPages.
+    mockPdfLibStatic.load.mockResolvedValue(mockLoadedSourceDoc);
   });
 
   it('should load source buffer, copy pages to target, and return success with page count', async () => {
-    // Arrange:
     const sourceBuffer = Buffer.from('%PDF-dummy-source');
-    // Customize mocks for this specific test: source PDF has 3 pages.
-    mockLoadedSourceDoc.getPageIndices.mockReturnValue([0, 1, 2]);
-    mockTargetDoc.copyPages.mockResolvedValue(['p0', 'p1', 'p2']); // `copyPages` returns an array of copied page objects
+    // Customize the behavior of the mock instances for this specific test case:
+    mockLoadedSourceDoc.getPageIndices.mockReturnValue([0, 1, 2]); // Source PDF has 3 pages
+    mockTargetDoc.copyPages.mockResolvedValue(['p0', 'p1', 'p2']); // Simulate copyPages returning 3 page objects
 
-    // Act: Call the function under test.
     const result = await appendPdfPages(sourceBuffer, mockTargetDoc);
 
-    // Assert:
-    // 1. `PDFDocument.load` was called with the provided source buffer.
-    expect(PDFDocument.load).toHaveBeenCalledWith(sourceBuffer);
-    // 2. `copyPages` was called on `mockTargetDoc`, with `mockLoadedSourceDoc` and its page indices.
+    // Assertions:
+    // 1. PDFDocument.load (our mock) was called with the source buffer.
+    expect(mockPdfLibStatic.load).toHaveBeenCalledWith(sourceBuffer);
+    // 2. copyPages was called on the mockTargetDoc, with the mockLoadedSourceDoc and its page indices.
     expect(mockTargetDoc.copyPages).toHaveBeenCalledWith(mockLoadedSourceDoc, [0, 1, 2]);
-    // 3. `addPage` was called on `mockTargetDoc` for each page returned by `copyPages`.
+    // 3. addPage was called on mockTargetDoc for each page returned by copyPages.
     expect(mockTargetDoc.addPage).toHaveBeenCalledTimes(3);
     expect(mockTargetDoc.addPage).toHaveBeenNthCalledWith(1, 'p0');
     expect(mockTargetDoc.addPage).toHaveBeenNthCalledWith(2, 'p1');
     expect(mockTargetDoc.addPage).toHaveBeenNthCalledWith(3, 'p2');
-    // 4. The function returned a success status and the correct number of pages added.
+    // 4. The function returned the expected success status and page count.
     expect(result).toEqual({ success: true, pagesAdded: 3 });
   });
 
   it('should return a failure object if PDFDocument.load fails', async () => {
-    // Arrange:
     const sourceBuffer = Buffer.from('%PDF-bad-source');
     const expectedError = new Error('Failed to load PDF');
-    jest.spyOn(PDFDocument, 'load').mockRejectedValue(expectedError); // Simulate load failure
+    mockPdfLibStatic.load.mockRejectedValue(expectedError); // Simulate PDFDocument.load failure
 
-    // Act:
     const result = await appendPdfPages(sourceBuffer, mockTargetDoc);
 
-    // Assert:
     expect(result.success).toBe(false);
-    expect(result.error).toBe(expectedError); // The exact error should be propagated
-    expect(mockTargetDoc.copyPages).not.toHaveBeenCalled(); // `copyPages` should not be called if load fails
-    expect(mockTargetDoc.addPage).not.toHaveBeenCalled(); // `addPage` should not be called
+    expect(result.error).toBe(expectedError);
+    expect(mockTargetDoc.copyPages).not.toHaveBeenCalled();
+    expect(mockTargetDoc.addPage).not.toHaveBeenCalled();
   });
 
   it('should return a failure object if targetDoc.copyPages fails', async () => {
-    // Arrange:
     const sourceBuffer = Buffer.from('%PDF-good-source');
     const expectedError = new Error('Failed to copy pages');
-    mockTargetDoc.copyPages.mockRejectedValue(expectedError); // Simulate copyPages failure
+    mockTargetDoc.copyPages.mockRejectedValue(expectedError); // Simulate copyPages failure on the target doc
 
-    // Act:
     const result = await appendPdfPages(sourceBuffer, mockTargetDoc);
 
-    // Assert:
     expect(result.success).toBe(false);
     expect(result.error).toBe(expectedError);
-    expect(mockTargetDoc.addPage).not.toHaveBeenCalled(); // `addPage` should not be called if copyPages fails
+    expect(mockTargetDoc.addPage).not.toHaveBeenCalled();
+  });
+
+  it('should handle zero pages in the source document correctly', async () => {
+    const sourceBuffer = Buffer.from('%PDF-empty-source');
+    mockLoadedSourceDoc.getPageIndices.mockReturnValue([]); // Source PDF has 0 pages
+
+    const result = await appendPdfPages(sourceBuffer, mockTargetDoc);
+
+    expect(mockPdfLibStatic.load).toHaveBeenCalledWith(sourceBuffer);
+    expect(mockTargetDoc.copyPages).not.toHaveBeenCalled();
+    expect(mockTargetDoc.addPage).not.toHaveBeenCalled();
+    expect(result).toEqual({ success: true, pagesAdded: 0 });
   });
 });
 
-/**
- * Tests for `mergePdfs(pdfBuffers[])`
- *
- * `mergePdfs` takes an array of PDF buffers. It creates a new, empty PDFDocument,
- * then iteratively calls `appendPdfPages` for each buffer to add its content to the
- * new document. Finally, it saves the new document and returns its data as a Buffer.
- */
 describe('mergePdfs', () => {
-  let mockCreatedPdfDoc; // Mock of the PDFDocument instance returned by PDFDocument.create()
-  let sourcePdfBuffers;
+  let mockCreatedPdfDoc;  // Mock instance for the PDFDocument created by PDFDocument.create()
+  let mockLoadedPdfDoc;   // Mock instance for PDFDocuments loaded by PDFDocument.load()
 
   beforeEach(() => {
-    // This mock represents the new PDFDocument that `mergePdfs` creates internally.
-    // `appendPdfPages` will interact with its `copyPages` and `addPage` methods.
-    // `mergePdfs` will call its `save` method.
-    mockCreatedPdfDoc = {
-      copyPages: jest.fn().mockResolvedValue(['mockPageObject']), // Mock for appendPdfPages's internal call
-      addPage: jest.fn(),                                     // Mock for appendPdfPages's internal call
-      save: jest.fn().mockResolvedValue(Buffer.from('merged PDF content')),
-    };
+    mockPdfLibStatic.create.mockReset();
+    mockPdfLibStatic.load.mockReset();
 
-    // Spy on `PDFDocument.create` (static method) to return our `mockCreatedPdfDoc`.
-    jest.spyOn(PDFDocument, 'create').mockResolvedValue(mockCreatedPdfDoc);
+    mockCreatedPdfDoc = createMockPdfDocInstance();
+    mockLoadedPdfDoc = createMockPdfDocInstance(); // General mock for loaded documents
 
-    // Spy on `PDFDocument.load` as it's called by the *actual* `appendPdfPages` function.
-    // For successful merge operations, `appendPdfPages` needs `PDFDocument.load` to succeed.
-    // We make it return a minimal mock of a loaded document.
-    jest.spyOn(PDFDocument, 'load').mockResolvedValue({
-      getPageIndices: jest.fn().mockReturnValue([0]), // Simulate each source PDF having 1 page
-    });
-
-    // Prepare dummy PDF buffers for merging.
-    sourcePdfBuffers = [
-      Buffer.from('%PDF-source1'),
-      Buffer.from('%PDF-source2'),
-    ];
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
+    // Configure static mock methods
+    mockPdfLibStatic.create.mockResolvedValue(mockCreatedPdfDoc);
+    // appendPdfPages (called by mergePdfs) will use PDFDocument.load
+    mockPdfLibStatic.load.mockResolvedValue(mockLoadedPdfDoc);
   });
 
   it('should create a new PDF, append pages from all buffers, save, and return the merged buffer', async () => {
-    // Act: Call the function under test.
+    const sourcePdfBuffers = [
+      Buffer.from('%PDF-source1'),
+      Buffer.from('%PDF-source2'),
+    ];
+
+    // Customize behavior for this test:
+    // Each loaded source PDF will appear to have 1 page.
+    mockLoadedPdfDoc.getPageIndices.mockReturnValue([0]);
+    // When appendPdfPages calls copyPages on mockCreatedPdfDoc, it will simulate copying one page object.
+    mockCreatedPdfDoc.copyPages.mockResolvedValue(['oneCopiedPageObject']);
+    // The save method on the created document will return specific content.
+    const expectedMergedContent = Buffer.from('successfully merged content');
+    mockCreatedPdfDoc.save.mockResolvedValue(expectedMergedContent);
+
     const mergedBuffer = await mergePdfs(sourcePdfBuffers);
 
-    // Assert:
+    // Assertions:
     // 1. A new PDFDocument was created.
-    expect(PDFDocument.create).toHaveBeenCalledTimes(1);
+    expect(mockPdfLibStatic.create).toHaveBeenCalledTimes(1);
 
-    // 2. `PDFDocument.load` (called by `appendPdfPages`) was invoked for each source buffer.
-    expect(PDFDocument.load).toHaveBeenCalledTimes(sourcePdfBuffers.length);
-    expect(PDFDocument.load).toHaveBeenNthCalledWith(1, sourcePdfBuffers[0]);
-    expect(PDFDocument.load).toHaveBeenNthCalledWith(2, sourcePdfBuffers[1]);
+    // 2. PDFDocument.load was called for each source buffer (by appendPdfPages).
+    expect(mockPdfLibStatic.load).toHaveBeenCalledTimes(sourcePdfBuffers.length);
+    expect(mockPdfLibStatic.load).toHaveBeenNthCalledWith(1, sourcePdfBuffers[0]);
+    expect(mockPdfLibStatic.load).toHaveBeenNthCalledWith(2, sourcePdfBuffers[1]);
 
-    // 3. `copyPages` on `mockCreatedPdfDoc` (the target) was called for each source buffer
-    //    (via the internal `appendPdfPages` calls).
+    // 3. copyPages on mockCreatedPdfDoc was called for each source PDF.
+    //    (appendPdfPages uses mockCreatedPdfDoc as its targetDoc).
     expect(mockCreatedPdfDoc.copyPages).toHaveBeenCalledTimes(sourcePdfBuffers.length);
+    expect(mockCreatedPdfDoc.copyPages).toHaveBeenCalledWith(mockLoadedPdfDoc, [0]); // Assuming [0] from getPageIndices
 
-    // 4. `addPage` on `mockCreatedPdfDoc` was called for each page copied.
-    //    (Since getPageIndices returns [0], one page per source, copyPages returns ['mockPageObject'])
+    // 4. addPage on mockCreatedPdfDoc was called for each page copied.
     expect(mockCreatedPdfDoc.addPage).toHaveBeenCalledTimes(sourcePdfBuffers.length);
-    expect(mockCreatedPdfDoc.addPage).toHaveBeenCalledWith('mockPageObject');
+    expect(mockCreatedPdfDoc.addPage).toHaveBeenCalledWith('oneCopiedPageObject');
 
-
-    // 5. The `save` method of the `mockCreatedPdfDoc` was called.
+    // 5. The save method of mockCreatedPdfDoc was called.
     expect(mockCreatedPdfDoc.save).toHaveBeenCalledTimes(1);
 
-    // 6. The function returned the buffer from `mockCreatedPdfDoc.save`.
+    // 6. The function returned the buffer from mockCreatedPdfDoc.save.
     expect(Buffer.isBuffer(mergedBuffer)).toBe(true);
-    expect(mergedBuffer.toString()).toBe('merged PDF content');
+    expect(mergedBuffer).toBe(expectedMergedContent);
   });
 
-  it('should throw an error if an internal appendPdfPages operation fails (e.g., PDFDocument.load fails)', async () => {
-    // Arrange: Simulate a failure during one of the `appendPdfPages` operations.
-    // Let the first `PDFDocument.load` succeed, but the second one fail.
-    const loadError = new Error('Simulated load failure');
-    jest.spyOn(PDFDocument, 'load')
-      .mockResolvedValueOnce({ getPageIndices: jest.fn().mockReturnValue([0]) }) // First call to appendPdfPages's load
-      .mockRejectedValueOnce(loadError); // Second call to appendPdfPages's load fails
+  it('should throw an error if PDFDocument.create fails', async () => {
+    const sourcePdfBuffers = [Buffer.from('s1')];
+    const createError = new Error('Failed to create PDF');
+    mockPdfLibStatic.create.mockRejectedValue(createError);
 
-    // Act & Assert: Expect `mergePdfs` to catch the error from `appendPdfPages` and re-throw its own error.
+    await expect(mergePdfs(sourcePdfBuffers)).rejects.toThrow(`Failed to merge PDFs: ${createError.message}`);
+    expect(mockCreatedPdfDoc.save).not.toHaveBeenCalled(); // Save should not be called
+  });
+
+  it('should throw an error if an internal appendPdfPages (PDFDocument.load) fails', async () => {
+    const sourcePdfBuffers = [Buffer.from('s1'), Buffer.from('s2')];
+    const loadError = new Error('Simulated load failure in appendPdfPages');
+
+    // First load succeeds, second fails
+    mockPdfLibStatic.load
+      .mockResolvedValueOnce(createMockPdfDocInstance()) // for first buffer
+      .mockRejectedValueOnce(loadError); // for second buffer
+
     await expect(mergePdfs(sourcePdfBuffers)).rejects.toThrow(`Failed to merge PDFs: ${loadError.message}`);
-
-    // Ensure `save` was not called on the new document if an append operation failed.
     expect(mockCreatedPdfDoc.save).not.toHaveBeenCalled();
   });
 
-  it('should throw an error if PDFDocument.create itself fails', async () => {
-    // Arrange: Simulate `PDFDocument.create` failing.
-    const createError = new Error('Failed to create new PDFDocument');
-    jest.spyOn(PDFDocument, 'create').mockRejectedValue(createError);
+  it('should throw an error if an internal appendPdfPages (targetDoc.copyPages) fails', async () => {
+    const sourcePdfBuffers = [Buffer.from('s1')];
+    const copyError = new Error('Simulated copyPages failure in appendPdfPages');
 
-    // Act & Assert:
-    await expect(mergePdfs(sourcePdfBuffers)).rejects.toThrow(`Failed to merge PDFs: ${createError.message}`);
+    // PDFDocument.load for the source succeeds
+    mockPdfLibStatic.load.mockResolvedValue(mockLoadedPdfDoc);
+    // But when appendPdfPages tries to copy to mockCreatedPdfDoc, it fails
+    mockCreatedPdfDoc.copyPages.mockRejectedValue(copyError);
+
+    await expect(mergePdfs(sourcePdfBuffers)).rejects.toThrow(`Failed to merge PDFs: ${copyError.message}`);
+    expect(mockCreatedPdfDoc.save).not.toHaveBeenCalled();
   });
 
   it('should throw an error if the final save operation on the merged document fails', async () => {
-    // Arrange: Simulate `mockCreatedPdfDoc.save` failing.
+    const sourcePdfBuffers = [Buffer.from('s1')];
     const saveError = new Error('Failed to save merged PDF');
     mockCreatedPdfDoc.save.mockRejectedValue(saveError);
 
-    // Act & Assert:
     await expect(mergePdfs(sourcePdfBuffers)).rejects.toThrow(`Failed to merge PDFs: ${saveError.message}`);
+  });
+
+  it('should correctly merge an empty array of PDF buffers (resulting in an empty new PDF)', async () => {
+    const sourcePdfBuffers = [];
+    const expectedEmptyPdfContent = Buffer.from('empty new pdf');
+    mockCreatedPdfDoc.save.mockResolvedValue(expectedEmptyPdfContent); // Save on an empty doc
+
+    const mergedBuffer = await mergePdfs(sourcePdfBuffers);
+
+    expect(mockPdfLibStatic.create).toHaveBeenCalledTimes(1);
+    expect(mockPdfLibStatic.load).not.toHaveBeenCalled(); // No buffers to load
+    expect(mockCreatedPdfDoc.copyPages).not.toHaveBeenCalled();
+    expect(mockCreatedPdfDoc.addPage).not.toHaveBeenCalled();
+    expect(mockCreatedPdfDoc.save).toHaveBeenCalledTimes(1);
+    expect(mergedBuffer).toBe(expectedEmptyPdfContent);
   });
 });

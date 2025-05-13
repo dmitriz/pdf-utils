@@ -7,64 +7,65 @@ const path = require('path');
 const { PDFDocument } = require('pdf-lib');
 
 /**
- * Processes a single PDF for merging
- * Updated to accept raw PDF data instead of file paths.
- * @param {Buffer} pdfBuffer - The raw PDF data
- * @param {PDFDocument} targetDoc - Target PDF document to add pages to
- * @returns {Promise<Object>} Result of processing
+ * Appends pages from a source PDF buffer to a target PDFDocument instance.
+ * This function is designed for in-memory PDF manipulation.
+ *
+ * @param {Buffer} sourceBuffer The buffer of the source PDF.
+ * @param {PDFDocument} targetDoc The target PDFDocument instance to which pages will be added.
+ * @returns {Promise<{success: boolean, pagesAdded: number, error?: Error}>}
+ *          An object indicating success or failure, and the number of pages added.
  */
-const appendPdfPages = async (pdfBuffer, targetDoc) => {
+const appendPdfPages = async (sourceBuffer, targetDoc) => {
   try {
-    const sourceDoc = await PDFDocument.load(pdfBuffer);
-    const copiedPages = await targetDoc.copyPages(sourceDoc, sourceDoc.getPageIndices());
-    copiedPages.forEach((page) => targetDoc.addPage(page));
+    const sourceDoc = await PDFDocument.load(sourceBuffer);
+    const pageIndices = sourceDoc.getPageIndices();
+    if (pageIndices.length === 0) {
+      return { success: true, pagesAdded: 0 }; // Correctly handle empty source PDF
+    }
+    const copiedPages = await targetDoc.copyPages(sourceDoc, pageIndices);
+    copiedPages.forEach((page) => {
+      targetDoc.addPage(page);
+    });
     return { success: true, pagesAdded: copiedPages.length };
   } catch (error) {
-    return { success: false, error };
+    return { success: false, error, pagesAdded: 0 }; // Ensure pagesAdded is 0 on error
   }
 };
 
 /**
- * Merges multiple PDFs into a single PDF
- * Updated to accept raw PDF data instead of file paths.
- * @param {Array<Buffer>} pdfBuffers - Array of raw PDF data
- * @returns {Promise<Buffer>} The merged PDF data
+ * Merges multiple PDF buffers into a single PDF buffer, purely in-memory.
+ * If an empty array is provided, it returns a new, empty PDF document.
+ *
+ * @param {Array<Buffer>} pdfBuffers An array of PDF buffers to merge.
+ * @returns {Promise<Buffer>} A buffer representing the merged PDF.
+ * @throws {Error} If any error occurs during the merging process.
  */
 const mergePdfs = async (pdfBuffers) => {
-  if (!Array.isArray(pdfBuffers) || pdfBuffers.length === 0) {
-    throw new Error('Input must be a non-empty array of PDF buffers.');
-  }
+  // Removed the check for empty pdfBuffers to allow creating an empty PDF.
+  // if (!Array.isArray(pdfBuffers) || pdfBuffers.length === 0) {
+  //   throw new Error('Input must be a non-empty array of PDF buffers.');
+  // }
 
+  let newPdfDoc;
   try {
-    // Initialize with the first PDF buffer by creating a new document from it,
-    // or start with an empty document if preferred, though this approach
-    // avoids an unnecessary initial empty document if there's only one buffer.
-    // However, for a reduce pattern, starting with a created empty doc is cleaner.
+    newPdfDoc = await PDFDocument.create();
 
-    const mainDoc = await PDFDocument.create();
-
-    // Use reduce to sequentially append pages from each buffer to the mainDoc
-    await pdfBuffers.reduce(async (previousPromise, currentPdfBuffer) => {
-      // Wait for the previous append operation to complete (if any)
-      await previousPromise;
-      
-      // Append pages from the current buffer to the mainDoc
-      const result = await appendPdfPages(currentPdfBuffer, mainDoc);
-      if (!result.success) {
-        // If appendPdfPages fails, it returns an error object.
-        // We throw this error to be caught by the outer try...catch block.
-        throw result.error;
+    // Only iterate if pdfBuffers is not empty
+    if (Array.isArray(pdfBuffers) && pdfBuffers.length > 0) {
+      for (const pdfBuffer of pdfBuffers) {
+        const result = await appendPdfPages(pdfBuffer, newPdfDoc);
+        if (!result.success) {
+          // Propagate the error from appendPdfPages
+          throw result.error; // result.error should be an Error object
+        }
       }
-      // The return value of the reducer isn't strictly needed here since we're modifying mainDoc directly,
-      // but we need to return a promise for the async reducer.
-      return Promise.resolve(); 
-    }, Promise.resolve()); // Initial value for the reduce accumulator
-
-    return await mainDoc.save();
+    }
+    return await newPdfDoc.save();
   } catch (error) {
-    // console.error('Error during PDF merge operation:', error);
-    // Ensure a consistent error message format
-    throw new Error(`Failed to merge PDFs: ${error.message}`);
+    // Ensure a more descriptive error is thrown if it originates here or is re-thrown.
+    // Check if error already has a message, otherwise use a generic one.
+    const errorMessage = error.message ? error.message : 'Unknown error during PDF merge';
+    throw new Error(`Failed to merge PDFs: ${errorMessage}`);
   }
 };
 
