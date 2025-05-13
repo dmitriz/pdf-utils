@@ -66,7 +66,9 @@ const mergePdfs = async (...args) => {
       }
     }
     
-    return Buffer.from(await newPdfDoc.save());
+    // Convert Uint8Array to Node.js Buffer
+    const pdfBytes = await newPdfDoc.save();
+    return Buffer.from(pdfBytes);
   } catch (error) {
     // Ensure a more descriptive error is thrown
     const errorMessage = error.message ? error.message : 'Unknown error during PDF merge';
