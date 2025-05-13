@@ -92,7 +92,7 @@ const appendPdfs = async (sourceBuffer, targetBuffer) => {
  * @returns {Promise<Buffer>} A buffer representing the merged PDF
  * @throws {Error} If any error occurs during the merging process
  */
-const mergePdfs = async (...args) => {
+const mergePdfsInMemory = async (...args) => {
   let pdfBuffers;
   
   // Handle both function call styles: mergePdfs(pdf1, pdf2) and mergePdfs([pdf1, pdf2])
@@ -213,7 +213,7 @@ const mergePdfsFromDisk = async ({ pdfPaths, outputPath, allowOutsideBaseDir = f
     }
     
     // Merge the PDF buffers
-    const mergedPdfBuffer = await mergePdfs(pdfBuffers);
+    const mergedPdfBuffer = await mergePdfsInMemory(pdfBuffers);
     
     // Save the merged PDF
     return savePdf({
@@ -230,10 +230,12 @@ const mergePdfsFromDisk = async ({ pdfPaths, outputPath, allowOutsideBaseDir = f
   }
 };
 
+// Export all the functions needed
 module.exports = {
   appendPdfs,
-  mergePdfs,
+  mergePdfsInMemory,
+  mergePdfs: mergePdfsInMemory, // Export the in-memory version as mergePdfs for test compatibility
   savePdf,
-  ensureDirectoryExists,
-  mergePdfsFromDisk
+  mergePdfsFromDisk,
+  ensureDirectoryExists
 };

@@ -57,6 +57,11 @@ async function savePdf({ pdfBuffer, outputPath }) {
  * @returns {Promise<Object>} Result object with path to merged PDF
  */
 async function mergePdfs({ pdfPaths, outputPath }) {
+  // Handle case where pdfPaths is not defined or not an array
+  if (!pdfPaths || !Array.isArray(pdfPaths)) {
+    pdfPaths = [];
+  }
+
   // Resolve all paths based on config
   const resolvedPaths = pdfPaths.map(p => 
     path.isAbsolute(p) ? p : path.resolve(config.baseDir, p));
@@ -65,7 +70,7 @@ async function mergePdfs({ pdfPaths, outputPath }) {
     ? outputPath
     : path.resolve(config.baseDir, outputPath);
   
-  return pdfUtils.mergePdfs({
+  return pdfUtils.mergePdfsFromDisk({
     pdfPaths: resolvedPaths,
     outputPath: resolvedOutput,
     allowOutsideBaseDir: config.allowOutsideBaseDir
@@ -76,14 +81,14 @@ async function mergePdfs({ pdfPaths, outputPath }) {
  * Ensures that a directory exists, creating it if necessary
  * @param {Object} params - Parameters
  * @param {string} params.dirPath - Directory path to ensure exists
- * @returns {Object} Result object
+ * @returns {Promise<Object>} Result object
  */
 function ensureDirectoryExists({ dirPath }) {
   if (!config.createDirsIfMissing) {
-    return { 
+    return Promise.resolve({ 
       success: false, 
       error: new Error('Directory creation disabled in configuration') 
-    };
+    });
   }
   
   const resolvedPath = path.isAbsolute(dirPath)
@@ -99,7 +104,6 @@ module.exports = {
   savePdf,
   mergePdfs,
   ensureDirectoryExists,
-  processSinglePdf: pdfUtils.processSinglePdf,
   // Export constants for backwards compatibility
   DEFAULT_OUTPUT_DIR: path.resolve(config.baseDir, 'output'),
   PDF_DIR: path.resolve(config.baseDir, 'output', 'pdfs')

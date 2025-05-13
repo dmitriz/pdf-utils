@@ -1,40 +1,41 @@
 /**
  * Unit tests for index.js which serves as the main API wrapper
  */
-
-// Save original module require to use in resetModule
-const originalRequire = require;
-
-// Import modules
 const path = require('path');
 
-// Mock the pdf-utils dependency before importing any other modules
-jest.mock('../src/pdf-utils', () => {
-  return {
-    savePdf: jest.fn().mockImplementation(({ pdfBuffer, outputPath }) => {
-      return Promise.resolve({
-        success: true,
-        path: outputPath
-      });
-    }),
-    mergePdfs: jest.fn().mockImplementation(({ pdfPaths, outputPath }) => {
-      return Promise.resolve({
-        success: true,
-        path: outputPath
-      });
-    }),
-    ensureDirectoryExists: jest.fn().mockImplementation(({ dirPath }) => {
-      return Promise.resolve({
-        success: true,
-        path: dirPath
-      });
-    })
-  };
+// Clear any existing mocks
+jest.resetModules();
+
+// Define our mocks
+const mockSavePdf = jest.fn().mockImplementation(({ pdfBuffer, outputPath }) => {
+  return Promise.resolve({
+    success: true,
+    path: outputPath
+  });
 });
 
-// Import these AFTER the mock is set up
-const pdfUtils = require('../src/pdf-utils');
-const indexPath = '../src/index';
+const mockMergePdfsFromDisk = jest.fn().mockImplementation(({ pdfPaths, outputPath }) => {
+  return Promise.resolve({
+    success: true,
+    path: outputPath
+  });
+});
+
+const mockEnsureDirectoryExists = jest.fn().mockImplementation(({ dirPath }) => {
+  return Promise.resolve({
+    success: true,
+    path: dirPath
+  });
+});
+
+// Create a mock module
+jest.mock('../src/pdf-utils', () => {
+  return {
+    savePdf: mockSavePdf,
+    mergePdfsFromDisk: mockMergePdfsFromDisk,
+    ensureDirectoryExists: mockEnsureDirectoryExists
+  };
+});
 
 describe('index.js API wrapper', () => {
   let pdfUtilsIndexApi;
@@ -43,7 +44,14 @@ describe('index.js API wrapper', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     jest.resetModules();
-    pdfUtilsIndexApi = require(indexPath);
+    
+    // Re-setup our mocks
+    require('../src/pdf-utils').savePdf = mockSavePdf;
+    require('../src/pdf-utils').mergePdfsFromDisk = mockMergePdfsFromDisk;
+    require('../src/pdf-utils').ensureDirectoryExists = mockEnsureDirectoryExists;
+    
+    // Reload the index module to use fresh mocks
+    pdfUtilsIndexApi = require('../src/index');
   });
 
   describe('configure', () => {
@@ -65,7 +73,7 @@ describe('index.js API wrapper', () => {
       });
       
       // Should have used the custom baseDir
-      expect(pdfUtils.savePdf).toHaveBeenCalledWith({
+      expect(mockSavePdf).toHaveBeenCalledWith({
         pdfBuffer: Buffer.from('test'),
         outputPath: path.resolve('/custom/dir', testPath),
         allowOutsideBaseDir: true
@@ -82,7 +90,7 @@ describe('index.js API wrapper', () => {
       });
 
       // Should not modify absolute paths
-      expect(pdfUtils.savePdf).toHaveBeenCalledWith({
+      expect(mockSavePdf).toHaveBeenCalledWith({
         pdfBuffer: Buffer.from('test'),
         outputPath: absPath,
         allowOutsideBaseDir: false
@@ -99,7 +107,7 @@ describe('index.js API wrapper', () => {
       });
 
       // Should resolve relative paths
-      expect(pdfUtils.savePdf).toHaveBeenCalledWith({
+      expect(mockSavePdf).toHaveBeenCalledWith({
         pdfBuffer: Buffer.from('test'),
         outputPath: path.resolve(baseDir, relPath),
         allowOutsideBaseDir: false
@@ -122,7 +130,7 @@ describe('index.js API wrapper', () => {
       });
 
       // Should resolve relative paths but keep absolute intact
-      expect(pdfUtils.mergePdfs).toHaveBeenCalledWith({
+      expect(mockMergePdfsFromDisk).toHaveBeenCalledWith({
         pdfPaths: [
           '/absolute/path1.pdf',
           path.resolve(baseDir, 'relative/path2.pdf')
@@ -143,7 +151,7 @@ describe('index.js API wrapper', () => {
       });
 
       // Should call ensureDirectoryExists with resolved path
-      expect(pdfUtils.ensureDirectoryExists).toHaveBeenCalledWith({
+      expect(mockEnsureDirectoryExists).toHaveBeenCalledWith({
         dirPath: path.resolve(baseDir, dirPath)
       });
     });
@@ -162,20 +170,18 @@ describe('index.js API wrapper', () => {
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
       expect(result.error.message).toMatch(/Directory creation disabled/);
-      expect(pdfUtils.ensureDirectoryExists).not.toHaveBeenCalled();
+      expect(mockEnsureDirectoryExists).not.toHaveBeenCalled();
     });
     
     // Add test for default branch coverage
-    it('should use correct default values', () => {
+    it('should use correct default values', async () => {
       // Test the default values by examining the configuration
-      const defaultConfig = pdfUtilsIndexApi.configure({});
-      
-      // Use API to verify defaults
       const dirPath = 'test-defaults/dir';
-      return pdfUtilsIndexApi.ensureDirectoryExists({ dirPath })
-        .then(() => {
-          expect(pdfUtils.ensureDirectoryExists).toHaveBeenCalled();
-        });
+      await pdfUtilsIndexApi.ensureDirectoryExists({ dirPath });
+      
+      expect(mockEnsureDirectoryExists).toHaveBeenCalledWith({
+        dirPath: path.resolve(process.cwd(), dirPath)
+      });
     });
   });
 });
