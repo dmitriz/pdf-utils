@@ -2,8 +2,6 @@
  * PDF utility functions for handling PDF operations
  * Following functional programming paradigm with single object input/output
  */
-const fs = require('fs');
-const path = require('path');
 const { PDFDocument } = require('pdf-lib');
 
 /**
