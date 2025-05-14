@@ -204,11 +204,6 @@ const savePdf = async ({ pdfBuffer, outputPath, allowOutsideBaseDir = false }) =
  */
 const mergePdfsFromDisk = async ({ pdfPaths, outputPath, allowOutsideBaseDir = false }) => {
   try {
-    // Ensure pdfPaths is iterable
-    if (!pdfPaths) {
-      throw new Error('pdfPaths must be an array');
-    }
-    
     const pdfBuffers = [];
     
     // Read all PDF files
@@ -217,9 +212,8 @@ const mergePdfsFromDisk = async ({ pdfPaths, outputPath, allowOutsideBaseDir = f
       pdfBuffers.push(pdfBuffer);
     }
     
-    // Merge the PDF buffers - use the module's exported function
-    // so it can be properly spied on in tests
-    const mergedPdfBuffer = await module.exports.mergePdfsInMemory(pdfBuffers);
+    // Merge the PDF buffers
+    const mergedPdfBuffer = await mergePdfsInMemory(pdfBuffers);
     
     // Save the merged PDF
     return savePdf({
